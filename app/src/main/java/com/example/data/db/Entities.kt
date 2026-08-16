@@ -38,7 +38,8 @@ data class ChatMessageEntity(
     val tokenCount: Int = 0,
     val latencyMs: Long = 0,
     val modelUsed: String? = null,
-    val isLiked: Boolean? = null
+    val isLiked: Boolean? = null,
+    val imageAttachmentBase64: String? = null
 )
 
 @Entity(tableName = "generated_images")

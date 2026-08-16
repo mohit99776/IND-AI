@@ -1,6 +1,10 @@
 package com.example.ui
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.db.AppDatabase
@@ -11,6 +15,7 @@ import com.example.data.model.UserSubscriptionStatus
 import com.example.data.repository.ChatRepository
 import com.example.data.repository.SubscriptionRepository
 import com.example.util.TextToSpeechHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +26,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 
 data class ChatUiState(
     val activeSessionId: Long? = null,
@@ -30,6 +37,7 @@ data class ChatUiState(
     val systemPrompt: String = "",
     val isGenerating: Boolean = false,
     val inputText: String = "",
+    val selectedImageBase64: String? = null,
     val errorBanner: String? = null,
     val showSubscriptionModal: Boolean = false,
     val currentAppTab: Int = 0 // 0: Chat, 1: Image Studio
@@ -97,6 +105,51 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(inputText = newText)
     }
 
+    fun onImageSelected(uri: Uri?) {
+        if (uri == null) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val originalBitmap = BitmapFactory.decodeStream(inputStream)
+                inputStream?.close()
+
+                if (originalBitmap != null) {
+                    // Downscale bitmap if too large for API
+                    val maxDimension = 1024
+                    val ratio = originalBitmap.width.toFloat() / originalBitmap.height.toFloat()
+                    val targetWidth: Int
+                    val targetHeight: Int
+                    if (ratio > 1f) {
+                        targetWidth = maxDimension.coerceAtMost(originalBitmap.width)
+                        targetHeight = (targetWidth / ratio).toInt()
+                    } else {
+                        targetHeight = maxDimension.coerceAtMost(originalBitmap.height)
+                        targetWidth = (targetHeight * ratio).toInt()
+                    }
+
+                    val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, targetWidth, targetHeight, true)
+                    val outputStream = ByteArrayOutputStream()
+                    scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+                    val byteArray = outputStream.toByteArray()
+                    val base64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
+
+                    withContext(Dispatchers.Main) {
+                        _uiState.value = _uiState.value.copy(selectedImageBase64 = base64)
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(errorBanner = "Could not load selected image")
+                }
+            }
+        }
+    }
+
+    fun clearSelectedImage() {
+        _uiState.value = _uiState.value.copy(selectedImageBase64 = null)
+    }
+
     fun selectSession(sessionId: Long) {
         viewModelScope.launch {
             val session = repository.getSession(sessionId)
@@ -118,13 +171,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(
             activeSessionId = null,
             inputText = "",
+            selectedImageBase64 = null,
             errorBanner = null,
             currentAppTab = 0
         )
     }
 
-    fun sendMessage(userPrompt: String) {
-        if (userPrompt.isBlank()) return
+    fun sendMessage(userPrompt: String, attachedImage: String? = _uiState.value.selectedImageBase64) {
+        if (userPrompt.isBlank() && attachedImage == null) return
+
+        val promptToSend = if (userPrompt.isBlank()) "What is in this image?" else userPrompt
 
         val currentSub = subscriptionStatus.value
         if (currentSub.isChatLimitReached) {
@@ -132,14 +188,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        _uiState.value = _uiState.value.copy(inputText = "", isGenerating = true, errorBanner = null)
+        _uiState.value = _uiState.value.copy(
+            inputText = "",
+            selectedImageBase64 = null,
+            isGenerating = true,
+            errorBanner = null
+        )
 
         activeGenerationJob = viewModelScope.launch {
             try {
                 // Ensure a session exists
                 var sessionId = _uiState.value.activeSessionId
                 if (sessionId == null) {
-                    val autoTitle = if (userPrompt.length > 25) userPrompt.take(25).trim() + "..." else userPrompt
+                    val autoTitle = if (promptToSend.length > 25) promptToSend.take(25).trim() + "..." else promptToSend
                     sessionId = repository.createNewSession(
                         title = autoTitle,
                         systemPrompt = _uiState.value.systemPrompt.ifBlank { null },
@@ -152,11 +213,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 val result = repository.sendMessageAndGetReply(
                     sessionId = sessionId,
-                    userPrompt = userPrompt,
+                    userPrompt = promptToSend,
                     modelId = _uiState.value.activeModelId,
                     systemPrompt = _uiState.value.systemPrompt.ifBlank { null },
                     temperature = _uiState.value.temperature,
-                    topP = _uiState.value.topP
+                    topP = _uiState.value.topP,
+                    imageAttachmentBase64 = attachedImage
                 )
 
                 if (!result.isSuccess && result.errorMessage?.contains("limit", ignoreCase = true) == true) {
@@ -180,7 +242,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val currentMessages = activeMessages.value
         val lastUserMessage = currentMessages.lastOrNull { it.role == "user" }
         if (lastUserMessage != null) {
-            sendMessage(lastUserMessage.content)
+            sendMessage(lastUserMessage.content, lastUserMessage.imageAttachmentBase64)
         }
     }
 

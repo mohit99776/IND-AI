@@ -3,6 +3,7 @@ package com.example.data.repository
 import com.example.data.api.ContentJson
 import com.example.data.api.GeminiApiRepository
 import com.example.data.api.GeminiGenerationResult
+import com.example.data.api.InlineDataJson
 import com.example.data.api.PartJson
 import com.example.data.db.ChatDao
 import com.example.data.db.ChatMessageEntity
@@ -63,7 +64,8 @@ class ChatRepository(
         modelId: String,
         systemPrompt: String?,
         temperature: Float,
-        topP: Float
+        topP: Float,
+        imageAttachmentBase64: String? = null
     ): GeminiGenerationResult {
         // 1. Check subscription limit
         if (subscriptionRepository != null && !subscriptionRepository.canSendMessage()) {
@@ -72,7 +74,8 @@ class ChatRepository(
                 sessionId = sessionId,
                 role = "user",
                 content = userPrompt,
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                imageAttachmentBase64 = imageAttachmentBase64
             )
             chatDao.insertMessage(userMessage)
 
@@ -102,7 +105,8 @@ class ChatRepository(
             sessionId = sessionId,
             role = "user",
             content = userPrompt,
-            timestamp = System.currentTimeMillis()
+            timestamp = System.currentTimeMillis(),
+            imageAttachmentBase64 = imageAttachmentBase64
         )
         chatDao.insertMessage(userMessage)
 
@@ -120,13 +124,26 @@ class ChatRepository(
             chatDao.updateSessionTitleAndTimestamp(sessionId, session.title, System.currentTimeMillis())
         }
 
-        // Convert past messages to Gemini ContentJson
-        // Only use the last 12 turns to prevent hitting token limits while maintaining context
-        val contextTurns = pastMessages.takeLast(12).map { msg ->
-            val role = if (msg.role == "user") "user" else "model"
+        // Convert valid past messages (excluding errors) to Gemini ContentJson
+        val validHistory = pastMessages.filter { it.role == "user" || it.role == "model" }.takeLast(12)
+        val contextTurns = validHistory.map { msg ->
+            val partsList = mutableListOf<PartJson>()
+            if (msg.content.isNotBlank()) {
+                partsList.add(PartJson(text = msg.content))
+            }
+            if (!msg.imageAttachmentBase64.isNullOrBlank()) {
+                partsList.add(
+                    PartJson(
+                        inlineData = InlineDataJson(
+                            mimeType = "image/jpeg",
+                            data = msg.imageAttachmentBase64
+                        )
+                    )
+                )
+            }
             ContentJson(
-                role = role,
-                parts = listOf(PartJson(text = msg.content))
+                role = msg.role,
+                parts = partsList
             )
         }
 

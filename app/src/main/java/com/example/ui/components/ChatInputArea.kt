@@ -2,13 +2,18 @@ package com.example.ui.components
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.speech.RecognizerIntent
+import android.util.Base64
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +33,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lightbulb
@@ -50,6 +56,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -61,12 +69,15 @@ import com.example.ui.theme.GeminiBlue
 import com.example.ui.theme.GeminiCyan
 import com.example.ui.theme.GeminiGradient
 import com.example.ui.theme.GeminiPurple
-import com.example.ui.theme.StudioDarkCardElevated
+import com.example.ui.theme.IndSaffron
 
 @Composable
 fun ChatInputArea(
     inputText: String,
     onInputTextChange: (String) -> Unit,
+    selectedImageBase64: String?,
+    onImageSelected: (Uri?) -> Unit,
+    onClearSelectedImage: () -> Unit,
     isGenerating: Boolean,
     onSendMessage: (String) -> Unit,
     onStopGenerating: () -> Unit,
@@ -75,6 +86,13 @@ fun ChatInputArea(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+
+    // Photo picker launcher
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        onImageSelected(uri)
+    }
 
     // Speech-to-Text launcher
     val speechLauncher = rememberLauncherForActivityResult(
@@ -120,12 +138,70 @@ fun ChatInputArea(
                         modifier = Modifier.size(14.dp)
                     )
                     Text(
-                        text = "System Persona Active: ${systemPrompt.take(45)}...",
+                        text = "System Persona: ${systemPrompt.take(45)}...",
                         fontSize = 11.sp,
                         color = GeminiPurple,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1
                     )
+                }
+            }
+
+            // Attached Image Thumbnail Preview Chip
+            if (!selectedImageBase64.isNullOrBlank()) {
+                val bitmap = remember(selectedImageBase64) {
+                    try {
+                        val decoded = Base64.decode(selectedImageBase64, Base64.DEFAULT)
+                        BitmapFactory.decodeByteArray(decoded, 0, decoded.size)
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+
+                if (bitmap != null) {
+                    Row(
+                        modifier = Modifier
+                            .padding(bottom = 6.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                            .padding(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Attached photo",
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(6.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Image Attached",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Gemini will analyze this image",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(
+                            onClick = onClearSelectedImage,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Remove attached image",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
 
@@ -136,9 +212,26 @@ fun ChatInputArea(
                     .clip(RoundedCornerShape(24.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp))
-                    .padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                    .padding(start = 8.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Attach Image Button
+                IconButton(
+                    onClick = {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AddPhotoAlternate,
+                        contentDescription = "Attach Image",
+                        tint = IndSaffron,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
                 // Preset Prompts shortcut icon
                 IconButton(
                     onClick = onOpenPresets,
@@ -158,7 +251,7 @@ fun ChatInputArea(
                     onValueChange = onInputTextChange,
                     placeholder = {
                         Text(
-                            text = "Ask Gemini Studio...",
+                            text = if (selectedImageBase64 != null) "Ask about this photo..." else "Ask Gemini anything...",
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -192,7 +285,7 @@ fun ChatInputArea(
                             }
                             speechLauncher.launch(intent)
                         } catch (e: Exception) {
-                            Toast.makeText(context, "Voice input not supported on this device", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Voice input not available", Toast.LENGTH_SHORT).show()
                         }
                     },
                     modifier = Modifier.size(36.dp)
@@ -223,7 +316,7 @@ fun ChatInputArea(
                         )
                     }
                 } else {
-                    val canSend = inputText.isNotBlank()
+                    val canSend = inputText.isNotBlank() || selectedImageBase64 != null
                     IconButton(
                         onClick = {
                             if (canSend) {

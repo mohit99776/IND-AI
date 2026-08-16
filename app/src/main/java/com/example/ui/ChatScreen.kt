@@ -285,6 +285,9 @@ fun ChatScreen(
                         ChatInputArea(
                             inputText = uiState.inputText,
                             onInputTextChange = { viewModel.onInputTextChange(it) },
+                            selectedImageBase64 = uiState.selectedImageBase64,
+                            onImageSelected = { viewModel.onImageSelected(it) },
+                            onClearSelectedImage = { viewModel.clearSelectedImage() },
                             isGenerating = uiState.isGenerating,
                             onSendMessage = { viewModel.sendMessage(it) },
                             onStopGenerating = { viewModel.stopGenerating() },

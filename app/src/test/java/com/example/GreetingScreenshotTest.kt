@@ -24,7 +24,10 @@ class GreetingScreenshotTest {
   fun greeting_screenshot() {
     composeTestRule.setContent {
       MyApplicationTheme {
-        EmptyChatStarter(onSelectStarterPrompt = {})
+        EmptyChatStarter(
+            onSelectStarterPrompt = {},
+            onSwitchToImageStudio = {}
+        )
       }
     }
 

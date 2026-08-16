@@ -12,7 +12,7 @@ import androidx.room.RoomDatabase
         GeneratedImageEntity::class,
         UserSubscriptionEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
