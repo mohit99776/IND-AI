@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- IND AI Center Sparkle Star inside 66dp safe zone (21..87) -->
+    <path android:pathData="M54,23 C54,40.1 40.1,54 23,54 C40.1,54 54,67.9 54,85 C54,67.9 67.9,54 85,54 C67.9,54 54,40.1 54,23 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="23"
+                android:startY="23"
+                android:endX="85"
+                android:endY="85"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF9933" />
+                <item android:offset="0.5" android:color="#6366F1" />
+                <item android:offset="1.0" android:color="#138808" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Secondary Sparkle Top Right in Safe Zone -->
+    <path
+        android:fillColor="#FFD700"
+        android:pathData="M78,28 C78,33 74,37 69,37 C74,37 78,41 78,46 C78,41 82,37 87,37 C82,37 78,33 78,28 Z" />
+
+</vector>

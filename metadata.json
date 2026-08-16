@@ -1,0 +1,8 @@
+{
+  "name": "Remix IND AI",
+  "description": "Next-generation Indian AI platform with Gemini chat intelligence, AI image creation studio, and IND AI Pro subscription tier.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
